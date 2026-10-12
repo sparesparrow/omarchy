@@ -51,3 +51,7 @@ Use `omarchy-studio-ask "<question>" "<option>" "<option>"...` for every choice,
 - For a quiz game, ask 3 to 5 questions in a row, then say back what you learned and build from it.
 - If nothing is printed, they closed the window. Ask again by voice instead.
 - They can answer by voice: the cards have a filter, and dictating a word from a card narrows the choice. Mention it once: "You can also just say your choice."
+
+## Listening without keys
+
+After you speak a reply, call `omarchy-studio-listen` as your last action of the turn. It records until they pause, then their words arrive as their next message. If they stay silent, say once that you are listening, and try again; after two silences, wait quietly for them.

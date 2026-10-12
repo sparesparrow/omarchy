@@ -104,3 +104,22 @@ grep -qx 'Love it.png' "$log_file" && grep -qx 'Not for me.png' "$log_file" || f
 if run omarchy-studio-ask "One?" "Only" 2>/dev/null; then fail "ask needs two options"; fi
 if run omarchy-studio-ask "Dup?" "A" "A" 2>/dev/null; then fail "ask rejects duplicate labels"; fi
 pass "ask shows picture cards and returns the choice"
+
+# Listen: speech then a pause stops dictation and sends Return; silence alone does not.
+for bin in omarchy-dictation wtype; do
+  printf '#!/bin/bash\necho "%s:$*" >>"$TEST_LOG"\n' "$bin" >"$test_bin/$bin"
+done
+printf '#!/bin/bash\necho idle\n' >"$test_bin/voxtype"
+chmod +x "$test_bin"/*
+printf '#!/bin/bash\necho "silence_start: 0"\necho "silence_end: 2"\necho "silence_start: 5"\n' >"$test_bin/ffmpeg"
+chmod +x "$test_bin/ffmpeg"
+: >"$log_file"
+run omarchy-studio-listen
+grep -qx 'omarchy-dictation:start' "$log_file" && grep -qx 'omarchy-dictation:stop' "$log_file" &&
+  grep -qx 'wtype:-k Return' "$log_file" || fail "listen records, stops after a pause, and sends"
+printf '#!/bin/bash\necho "silence_start: 0"\n' >"$test_bin/ffmpeg"
+: >"$log_file"
+run omarchy-studio-listen
+grep -q wtype "$log_file" && fail "listen sends nothing when nobody spoke"
+grep -qx 'omarchy-dictation:stop' "$log_file" || fail "listen stops recording when nobody spoke"
+pass "listen stops after a pause and sends only when spoken to"
