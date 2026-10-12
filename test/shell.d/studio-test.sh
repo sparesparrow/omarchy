@@ -40,3 +40,51 @@ pass "say speaks in the requested language"
 
 if run omarchy-studio-say 2>/dev/null; then fail "say without text fails"; fi
 pass "say requires text"
+
+# Multilingual dictation: Voxtype's English-only model is replaced once.
+cfg_home=$(mktemp -d)
+mkdir -p "$cfg_home/voxtype"
+printf '[whisper]\nmodel = "base.en"\nlanguage = "en"\n' >"$cfg_home/voxtype/config.toml"
+cat >"$test_bin/omarchy-default-dictation" <<'EOF2'
+#!/bin/bash
+echo voxtype
+EOF2
+cat >"$test_bin/voxtype" <<'EOF2'
+#!/bin/bash
+echo "voxtype:$*" >>"$TEST_LOG"
+EOF2
+cat >"$test_bin/systemctl" <<'EOF2'
+#!/bin/bash
+echo "systemctl:$*" >>"$TEST_LOG"
+EOF2
+chmod +x "$test_bin"/*
+: >"$log_file"
+XDG_CONFIG_HOME="$cfg_home" run omarchy-studio-language
+grep -qx 'model = "base"' "$cfg_home/voxtype/config.toml" || fail "English-only model is replaced"
+grep -qx 'language = "auto"' "$cfg_home/voxtype/config.toml" || fail "language is detected automatically"
+grep -q 'voxtype:setup --download' "$log_file" || fail "multilingual model is downloaded"
+: >"$log_file"
+XDG_CONFIG_HOME="$cfg_home" run omarchy-studio-language
+[[ ! -s $log_file ]] || fail "an already multilingual setup is left alone"
+rm -rf "$cfg_home"
+pass "studio switches dictation to a multilingual model once"
+
+# Invitation fires once, and only with a default agent.
+cat >"$test_bin/omarchy-default-agent" <<'EOF2'
+#!/bin/bash
+echo claude
+EOF2
+cat >"$test_bin/omarchy-done" <<'EOF2'
+#!/bin/bash
+m="$HOME/.m-$2"; [[ -e $m ]] && exit 1; touch "$m"
+EOF2
+cat >"$test_bin/omarchy-notification-send" <<'EOF2'
+#!/bin/bash
+echo "notify" >>"$TEST_LOG"
+EOF2
+chmod +x "$test_bin"/*
+: >"$log_file"
+run bash "$ROOT/install/user/first-run/setup-studio.hook"
+run bash "$ROOT/install/user/first-run/setup-studio.hook"
+[[ $(grep -c '^notify$' "$log_file") -eq 1 ]] || fail "studio invitation is sent once"
+pass "studio invitation is sent once"

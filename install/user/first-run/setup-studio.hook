@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -e
+
+# Invite once, and only people who can already launch an agent: Studio is a
+# guide for the default agent, so without one there is nothing to start.
+if [[ -n $(omarchy-default-agent) ]] && omarchy-done ensure studio-invitation; then
+  omarchy-notification-send -g 󰍬 "Build anything by talking" \
+    "Press Super + Shift + Ctrl + V and tell your agent what you imagine." \
+    --exec omarchy studio
+fi

@@ -18,6 +18,8 @@ if [[ -z $lang ]]; then
 fi
 [[ $lang == "C" || $lang == "POSIX" || -z $lang ]] && lang="en"
 
+omarchy-studio-language
+
 mkdir -p "$HOME/Studio"
 cd "$HOME/Studio"
 
