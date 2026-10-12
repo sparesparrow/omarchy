@@ -1,0 +1,11 @@
+[
+  {"id": "omarchy.clipboard", "name": "Clipboard history", "source": "first-party", "goals": ["web", "office", "coding", "learning"], "enable": "omarchy plugin enable omarchy.clipboard", "note": "Super + V"},
+  {"id": "omarchy.agents", "name": "Agents bar widget", "source": "first-party", "goals": ["ai", "coding"], "enable": "omarchy plugin enable omarchy.agents", "note": "Shows running AI agents"},
+  {"id": "omarchy.media", "name": "Media controls", "source": "first-party", "goals": ["media"], "enable": "omarchy plugin enable omarchy.media", "note": ""},
+  {"id": "rosakodu.dock", "name": "Dock (KDE/Ubuntu-like)", "source": "third-party", "reviewed": "2026-10-12, v1.8.37 commit e1c77f0: no sudo/network, writes only its own settings and its shell.json entry", "goals": ["web", "office", "media", "learning"], "install": "omarchy plugin add https://github.com/rosakodu/omarchy-dock.git --enable", "note": "Re-review if the commit changed"},
+  {"id": "hyprgrass", "name": "Touch gestures", "source": "third-party (Hyprland plugin)", "reviewed": "2026-10-12, pinned for Hyprland 0.56.2 (v0.8.2)", "goals": ["touch"], "install": "sudo pacman -S --needed meson ninja glm && hyprpm update && sudo hyprpm add https://github.com/horriblename/hyprgrass && sudo hyprpm enable hyprgrass", "note": "Needs root for /var/cache/hyprpm; config: see omarchy-steward"},
+  {"id": "wvkbd", "name": "On-screen keyboard", "source": "AUR", "goals": ["touch"], "install": "yay -S wvkbd", "note": "Not in the official repos; toggle with wvkbd-mobintl"},
+  {"id": "iio-sensor-proxy", "name": "Auto-rotation sensor", "source": "official repo (extra)", "goals": ["touch"], "install": "sudo pacman -S --needed iio-sensor-proxy", "note": "Helper: omarchy-steward/omarchy-steward-setup.sh"},
+  {"id": "voxtype", "name": "Voice dictation", "source": "Omarchy installer", "goals": ["voice"], "install": "omarchy install dictation voxtype", "note": "Czech needs a multilingual model: slow on weak CPUs"},
+  {"id": "omarchy-herdr", "name": "Herdr agent workspace", "source": "Omarchy package", "goals": ["ai", "coding"], "install": "omarchy pkg add omarchy-herdr", "note": "Super + Ctrl + Enter"}
+]

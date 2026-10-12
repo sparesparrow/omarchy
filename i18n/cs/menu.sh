@@ -1,0 +1,15 @@
+# shellcheck shell=bash disable=SC2034
+# Czech menu strings (labels for menu rows and onboarding entries).
+MSG["menu.onboard"]="Průvodce pro začátečníky"
+MSG["menu.practice"]="Procvičit klávesové zkratky"
+MSG["menu.login"]="Přihlásit AI účty (prohlížeč)"
+MSG["menu.bindings"]="Moje zkratky"
+MSG["menu.dictation"]="Diktování hlasem"
+MSG["menu.herdr"]="Pracovní plocha pro agenty (Herdr)"
+MSG["menu.plugins"]="Doporučené doplňky"
+MSG["menu.apps"]="Aplikace"
+MSG["menu.settings"]="Nastavení"
+MSG["menu.update"]="Aktualizovat systém"
+MSG["menu.learn"]="Naučit se"
+MSG["menu.keybindings"]="Klávesové zkratky"
+MSG["menu.quit"]="Konec"

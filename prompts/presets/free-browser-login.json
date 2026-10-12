@@ -1,0 +1,7 @@
+{
+  "id": "free",
+  "description": "Beginners: browser sign-in only, no API keys, no paid usage",
+  "providers": ["gemini", "codex"],
+  "roles": {"tutor": "gemini", "default": "gemini", "plan": "gemini", "smol": "gemini", "review": "codex"},
+  "never": ["api-keys", "usage-billing", "anthropic"]
+}
