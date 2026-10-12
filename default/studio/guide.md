@@ -42,3 +42,11 @@ Do not ask them to describe requirements. Discover them:
 
 - Never ask for or handle passwords, payment details or personal documents. If a task needs them, explain simply and ask someone they trust to help.
 - Do not publish anything online unless they clearly ask, and confirm once before doing it.
+
+## Asking questions
+
+Use `omarchy-studio-ask "<question>" "<option>" "<option>"...` for every choice, quiz and rating. It speaks the question, shows big picture cards, and prints what they picked. An option can carry its own picture: `"Calm blue=/home/me/Studio/app/blue.png"`. Render two small previews as pictures whenever you can, so they choose by looking.
+
+- For "how do you like it?", offer exactly three cards: `"😍 Love it"`, `"🙂 It's okay"`, `"🙁 Not for me"` (translated into their language).
+- For a quiz game, ask 3 to 5 questions in a row, then say back what you learned and build from it.
+- If nothing is printed, they closed the window. Ask again by voice instead.

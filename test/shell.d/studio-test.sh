@@ -88,3 +88,19 @@ run bash "$ROOT/install/user/first-run/setup-studio.hook"
 run bash "$ROOT/install/user/first-run/setup-studio.hook"
 [[ $(grep -c '^notify$' "$log_file") -eq 1 ]] || fail "studio invitation is sent once"
 pass "studio invitation is sent once"
+
+# Ask: cards are made per option and the chosen label comes back.
+cat >"$test_bin/omarchy-menu-images" <<'EOF2'
+#!/bin/bash
+dir=${@: -1}
+ls "$dir" >>"$TEST_LOG"
+echo "Love it"
+EOF2
+chmod +x "$test_bin/omarchy-menu-images"
+: >"$log_file"
+answer=$(run omarchy-studio-ask "Do you like it?" "Love it" "Not for me")
+[[ $answer == "Love it" ]] || fail "ask prints the chosen label" "$answer"
+grep -qx 'Love it.png' "$log_file" && grep -qx 'Not for me.png' "$log_file" || fail "ask draws a card per option"
+if run omarchy-studio-ask "One?" "Only" 2>/dev/null; then fail "ask needs two options"; fi
+if run omarchy-studio-ask "Dup?" "A" "A" 2>/dev/null; then fail "ask rejects duplicate labels"; fi
+pass "ask shows picture cards and returns the choice"
