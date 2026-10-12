@@ -132,3 +132,26 @@ grep -qx 'language = "cs"' "$cfg_home/voxtype/config.toml" || fail "an explicit 
 grep -qx 'model = "base"' "$cfg_home/voxtype/config.toml" || fail "the English-only model is still replaced"
 rm -rf "$cfg_home"
 pass "studio keeps an explicitly chosen dictation language"
+
+# Quiz: answers are saved by id, in any language.
+cat >"$test_bin/omarchy-studio-ask" <<'EOF2'
+#!/bin/bash
+# Picks the second card of every question.
+shift 3
+echo "$2"
+EOF2
+chmod +x "$test_bin/omarchy-studio-ask"
+run omarchy-studio-quiz --lang cs
+grep -q '"make":"story","feeling":"fun","colors":"orange"' "$test_home/Studio/taste.json" || fail "quiz saves ids, not labels" "$(<"$test_home/Studio/taste.json")"
+grep -q '"language":"cs"' "$test_home/Studio/taste.json" || fail "quiz records the language"
+rm -f "$test_home/Studio/taste.json"
+run omarchy-studio-quiz --lang xx
+grep -q '"language":"en"' "$test_home/Studio/taste.json" || fail "unknown language falls back to English"
+pass "quiz saves answers by id in any language"
+
+# Closing the quiz saves nothing.
+printf '#!/bin/bash\nexit 1\n' >"$test_bin/omarchy-studio-ask"
+rm -f "$test_home/Studio/taste.json"
+if run omarchy-studio-quiz --lang en; then fail "a closed quiz fails"; fi
+[[ ! -e $test_home/Studio/taste.json ]] || fail "a closed quiz saves nothing"
+pass "closing the quiz saves nothing"

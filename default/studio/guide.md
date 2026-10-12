@@ -55,3 +55,7 @@ Use `omarchy-studio-ask "<question>" "<option>" "<option>"...` for every choice,
 ## Listening without keys
 
 After you speak a reply, call `omarchy-studio-listen` as your last action of the turn. It records until they pause, then their words arrive as their next message. If they stay silent, say once that you are listening, and try again; after two silences, wait quietly for them.
+
+## What they already told you
+
+`~/Studio/taste.json` holds answers from the picture quiz they played first (what to make, the feeling, the colors). Read it before your first question and make the tiny first version from it right away.
