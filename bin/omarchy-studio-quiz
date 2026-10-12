@@ -21,9 +21,9 @@ fi
 # saved, so the file reads the same in every language.
 case "$lang" in
 cs)
-  prompts=("Co by sis chtěl(a) vytvořit?" "Jaký pocit máš rád(a)?" "Jaké barvy se ti líbí?")
+  prompts=("Co chcete vytvořit?" "Jaký pocit se vám líbí?" "Jaké barvy se vám líbí?")
   a1=("🎮 Hru" "📖 Příběh" "🖼️ Stránku s fotkami" "🛠️ Pomocníka")
-  a2=("😌 Klid" "🎉 Zábavu" "💪 Sílu" "🧸 Útulno")
+  a2=("😌 Klid" "🎉 Zábavu" "💪 Sílu" "🧸 Útulnost")
   a3=("🔵 Modrou" "🟠 Oranžovou" "🟢 Zelenou" "🟣 Fialovou")
   ;;
 es)

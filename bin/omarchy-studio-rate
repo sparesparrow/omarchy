@@ -24,7 +24,7 @@ if [[ -z $lang ]]; then
 fi
 
 case "$lang" in
-cs) question="Jak se ti to líbí?"; labels=("😍 Miluju to" "🙂 Ujde to" "🙁 Není to ono") ;;
+cs) question="Jak se vám to líbí?"; labels=("😍 Moc se mi to líbí" "🙂 Ujde to" "🙁 Není to ono") ;;
 es) question="¿Qué te parece?"; labels=("😍 Me encanta" "🙂 Está bien" "🙁 No es lo mío") ;;
 de) question="Wie gefällt es dir?"; labels=("😍 Ich liebe es" "🙂 Geht so" "🙁 Nicht mein Ding") ;;
 *) lang="en"; question="How do you like it?"; labels=("😍 Love it" "🙂 It's okay" "🙁 Not for me") ;;

@@ -5,7 +5,16 @@ set -e
 # Invite once, and only people who can already launch an agent: Studio is a
 # guide for the default agent, so without one there is nothing to start.
 if [[ -n $(omarchy-default-agent) ]] && omarchy-done ensure studio-invitation; then
-  omarchy-notification-send -g 󰍬 "Build anything by talking" \
-    "Press Super + Shift + Ctrl + V and tell your agent what you imagine." \
-    --exec omarchy studio
+  lang=${LC_MESSAGES:-${LANG:-en}}
+  case "${lang%%[_.@]*}" in
+  cs)
+    title="Tvořte hlasem"
+    body="Stiskněte Super + Shift + Ctrl + V a řekněte svému AI agentovi, co si představujete."
+    ;;
+  *)
+    title="Build anything by talking"
+    body="Press Super + Shift + Ctrl + V and tell your agent what you imagine."
+    ;;
+  esac
+  omarchy-notification-send -g 󰍬 "$title" "$body" --exec omarchy studio
 fi

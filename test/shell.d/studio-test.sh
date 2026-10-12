@@ -168,3 +168,12 @@ printf '#!/bin/bash\nexit 1\n' >"$test_bin/omarchy-studio-ask"
 if run omarchy-studio-rate other; then fail "a closed rating fails"; fi
 [[ ! -e $test_home/Studio/other ]] || fail "a closed rating saves nothing"
 pass "rate remembers how they felt, per project"
+
+# The invitation speaks Czech to Czech speakers, with formal address.
+printf '#!/bin/bash\necho "notify:$*" >>"$TEST_LOG"\n' >"$test_bin/omarchy-notification-send"
+chmod +x "$test_bin/omarchy-notification-send"
+rm -f "$test_home"/.m-*
+: >"$log_file"
+LC_MESSAGES=cs_CZ.UTF-8 run bash "$ROOT/install/user/first-run/setup-studio.hook"
+grep -q 'Tvořte hlasem' "$log_file" && grep -q 'Stiskněte' "$log_file" || fail "invitation is in Czech for Czech speakers"
+pass "studio invitation speaks Czech"
