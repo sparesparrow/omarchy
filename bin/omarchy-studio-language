@@ -11,13 +11,19 @@
 config="${XDG_CONFIG_HOME:-$HOME/.config}/voxtype/config.toml"
 [[ -f $config ]] || exit 0
 
+# A language someone chose on purpose (the Czech onboarding wizard sets "cs")
+# is kept; only the shipped English default is widened to auto-detection.
+language=$(sed -nE 's/^language = "(.*)"/\1/p' "$config" | head -1)
+if [[ $language == "en" ]]; then
+  language="auto"
+fi
+
 # Already multilingual: nothing to change or download.
-if grep -qE '^model = "[a-z0-9-]+"' "$config" && ! grep -qE '^model = ".*\.en"' "$config" &&
-  grep -qx 'language = "auto"' "$config"; then
+if ! grep -qE '^model = ".*\.en"' "$config" && grep -qx "language = \"$language\"" "$config"; then
   exit 0
 fi
 
-sed -i -E 's/^model = "([a-z0-9-]+)\.en"/model = "\1"/; s/^language = ".*"/language = "auto"/' "$config"
+sed -i -E "s/^model = \"([a-z0-9-]+)\.en\"/model = \"\1\"/; s/^language = \".*\"/language = \"$language\"/" "$config"
 
 # Download the multilingual model, then pick up the new config.
 voxtype setup --download --no-post-install

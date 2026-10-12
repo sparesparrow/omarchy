@@ -123,3 +123,12 @@ run omarchy-studio-listen
 grep -q wtype "$log_file" && fail "listen sends nothing when nobody spoke"
 grep -qx 'omarchy-dictation:stop' "$log_file" || fail "listen stops recording when nobody spoke"
 pass "listen stops after a pause and sends only when spoken to"
+
+# A language chosen on purpose survives; only the English default widens.
+cfg_home=$(mktemp -d); mkdir -p "$cfg_home/voxtype"
+printf '[whisper]\nmodel = "base.en"\nlanguage = "cs"\n' >"$cfg_home/voxtype/config.toml"
+XDG_CONFIG_HOME="$cfg_home" run omarchy-studio-language
+grep -qx 'language = "cs"' "$cfg_home/voxtype/config.toml" || fail "an explicit language is kept"
+grep -qx 'model = "base"' "$cfg_home/voxtype/config.toml" || fail "the English-only model is still replaced"
+rm -rf "$cfg_home"
+pass "studio keeps an explicitly chosen dictation language"
