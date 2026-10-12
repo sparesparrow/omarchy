@@ -15,7 +15,14 @@ omarchy-onboard voxtype    # diktování; na slabém procesoru doporučí angli�
 omarchy-onboard herdr      # základní plocha v Herdru podle profilu
 omarchy-onboard plugins    # doporučené doplňky podle cílů (nic neinstaluje)
 omarchy-onboard tutor      # trpělivý český AI lektor v nainstalovaném agentovi
+omarchy-onboard menu install        # přidá podnabídku „Průvodce“ do nabídky Omarchy (Super + Mezerník)
+omarchy-onboard menu remove         # odebere ji
+omarchy-onboard firstrun-hook enable|disable|status   # volitelné spuštění při přihlášení (výchozí: vypnuto)
 ```
+
+Nabídka: `menu install` upraví jen označený blok (`// >>> omarchy-onboard >>>`) v uživatelském souboru `~/.config/omarchy/extensions/omarchy-menu.jsonc`; ostatní položky zůstanou, před zápisem se soubor zálohuje a ověří. Upstream `bin/omarchy` ani systémová nabídka se nemění.
+
+První spuštění: `firstrun-hook enable` vytvoří `~/.config/autostart/omarchy-onboard.desktop`, který po přihlášení jednou otevře průvodce – jen dokud neexistuje `profile.json`. Ve výchozím stavu je vypnuto. Spouštění XDG autostart položek závisí na sezení (uwsm/Hyprland); kdo ho nemá, může do `~/.config/hypr/autostart.lua` přidat `omarchy-onboard firstrun`.
 
 Bezpečnost:
 
@@ -42,3 +49,5 @@ Non-interactive example (used by the smoke test):
 ```bash
 omarchy-onboard wizard --non-interactive --goals web,ai --experience none --daily browser --touch no --voice yes --ai yes
 ```
+
+Menu and first run: `omarchy-onboard menu install|remove` manages a marked "onboard" submenu block in the user extension file `~/.config/omarchy/extensions/omarchy-menu.jsonc` (backed up and validated; upstream `bin/omarchy` untouched). `omarchy-onboard firstrun-hook enable` adds an optional, off-by-default XDG autostart entry that opens the wizard once while no profile exists.

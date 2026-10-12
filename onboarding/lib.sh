@@ -5,12 +5,13 @@
 # - after each Hyprland change: hyprctl reload + configerrors, roll back on error
 # - never run sudo; print the command instead
 
-ONB_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy-onboarding"
+# Deliberately $HOME-based (not XDG_*): writes are restricted to ~/.config and ~/.local.
+ONB_CONFIG="$HOME/.config/omarchy-onboarding"
 ONB_PROFILE="$ONB_CONFIG/profile.json"
-ONB_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-onboarding"
+ONB_STATE="$HOME/.local/state/omarchy-onboarding"
 ONB_BACKUPS="$ONB_STATE/backups"
 ONB_RUN_ID="$(date +%Y%m%d-%H%M%S)"
-HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+HYPR_DIR="$HOME/.config/hypr"
 ONB_ASSUME_YES="${ONB_ASSUME_YES:-0}"
 ONB_NONINTERACTIVE="${ONB_NONINTERACTIVE:-0}"
 

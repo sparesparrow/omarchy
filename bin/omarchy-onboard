@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # omarchy:summary=Beginner onboarding wizard in Czech (profile, shortcuts, AI login, dictation, Herdr, plugins)
-# omarchy:args=[wizard|login|bindings|practice|voxtype|herdr|plugins|tutor|prompt <name>|i18n-check <lang>] [options]
+# omarchy:args=[wizard|login|bindings|practice|voxtype|herdr|plugins|tutor|prompt <name>|i18n-check <lang>|menu install|remove|firstrun-hook enable|disable|status] [options]
 # omarchy:examples=omarchy-onboard | omarchy-onboard practice | omarchy-onboard wizard --non-interactive --goals web,ai --experience none
 
 # Safety: writes only under ~/.config and ~/.local, backs up before edits,
@@ -32,6 +32,8 @@ Commands:
   tutor              start the patient Czech AI tutor in an installed agent CLI
   prompt NAME        print a prompt (tutor|analyzer|configurator) with the profile
   i18n-check LANG    list keys missing in a locale
+  menu install|remove   add/remove an "onboard" submenu in ~/.config/omarchy/extensions/omarchy-menu.jsonc
+  firstrun-hook enable|disable|status   optional autostart that opens the wizard once (off by default)
 
 Wizard options:
   --non-interactive  use flags/defaults only     --yes   answer yes to confirmations
@@ -202,9 +204,11 @@ cmd_login() {
 cmd_bindings() {
   require_profile || return 1
   local file="$HYPR_DIR/bindings.lua" lines=() chord desc cmd owner mods before=""
-  local -a wanted=("SUPER + ALT + H|Procvičit zkratky|xdg-terminal-exec bash -lc 'omarchy-onboard practice; exec bash'")
+  local self
+  self="$(onb_self)"
+  local -a wanted=("SUPER + ALT + H|Procvičit zkratky|xdg-terminal-exec bash -lc '$self practice; exec bash'")
   if onb_has_goal ai; then
-    wanted+=("SUPER + ALT + J|AI lektor|xdg-terminal-exec bash -lc 'omarchy-onboard tutor; exec bash'")
+    wanted+=("SUPER + ALT + J|AI lektor|xdg-terminal-exec bash -lc '$self tutor; exec bash'")
   fi
   if onb_has_goal touch && command -v wvkbd-mobintl >/dev/null 2>&1; then
     wanted+=("SUPER + ALT + O|Klávesnice na obrazovce|pkill -x wvkbd-mobintl || wvkbd-mobintl -L 300")
@@ -303,7 +307,7 @@ cmd_practice() {
 
 # ---------------------------------------------------------------- voxtype
 cmd_voxtype() {
-  local cpu_class cpu_model cfg="${XDG_CONFIG_HOME:-$HOME/.config}/voxtype/config.toml"
+  local cpu_class cpu_model cfg="$HOME/.config/voxtype/config.toml"
   { read -r cpu_class; read -r cpu_model; } < <(onb_cpu_class)
   if ! command -v voxtype >/dev/null 2>&1; then
     onb_say "$(t voice.install)"
@@ -412,6 +416,113 @@ cmd_i18n_check() {
   onb_say "missing: $nmissing / ${#keys[@]}" >&2
 }
 
+# ---------------------------------------------------------------- menu hook
+# Adds an "onboard" submenu to the user's Omarchy menu extension file. Only
+# the block between the markers is ever touched; the rest of the file stays.
+MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+MENU_BEGIN="// >>> omarchy-onboard >>>"
+MENU_END="// <<< omarchy-onboard <<<"
+
+onb_self() {
+  if command -v omarchy-onboard >/dev/null 2>&1; then echo omarchy-onboard; else realpath "$ONB_ROOT/bin/omarchy-onboard"; fi
+}
+
+jsonc_valid() {
+  # Strip // comments and trailing commas, then ask jq.
+  sed -E 's#(^|[[:space:]])//.*$##' "$1" | tr '\n' ' ' | sed -E 's/,[[:space:]]*([]}])/\1/g' | jq empty >/dev/null 2>&1
+}
+
+menu_strip_block() {
+  awk -v b="$MENU_BEGIN" -v e="$MENU_END" 'index($0,b){skip=1;next} index($0,e){skip=0;next} !skip' "$1"
+}
+
+menu_entries() {
+  local self launch
+  self="$(onb_self)"
+  launch="omarchy-launch-floating-terminal-with-presentation"
+  jq -n --arg l "$(t menu.onboard)" --arg d "$(t menu.onboard_desc)" '{"onboard":{icon:"󰑴",label:$l,description:$d}}' -c | sed -E 's/^\{/  /; s/\}$/,/'
+  local id label sub icon item
+  for item in "wizard|menu.onboard|wizard|󰑴" "practice|menu.practice|practice|󰌌" "tutor|menu.tutor|tutor|󰚩" "plugins|menu.plugins|plugins|󰏗"; do
+    IFS='|' read -r id label sub icon <<<"$item"
+    jq -n --arg k "onboard.$id" --arg i "$icon" --arg l "$(t "$label")" --arg a "$launch \"$self $sub\"" '{($k):{icon:$i,label:$l,action:$a}}' -c | sed -E 's/^\{/  /; s/\}$/,/'
+  done
+}
+
+cmd_menu() {
+  local action="${1:-install}" body tmp
+  case $action in
+    install|remove) ;;
+    *) onb_warn "usage: omarchy-onboard menu install|remove"; return 2 ;;
+  esac
+  tmp="$(mktemp)"
+  if [[ -f $MENU_EXT ]]; then menu_strip_block "$MENU_EXT" >"$tmp"; else printf '{\n}\n' >"$tmp"; fi
+  if [[ $action == install ]]; then
+    body="$(menu_entries)"
+    # Insert before the last closing brace; add a comma to the previous entry if it lacks one.
+    ONB_MENU_BODY="$body" awk -v b="$MENU_BEGIN" -v e="$MENU_END" '
+      { line[NR]=$0 }
+      END {
+        last=0; for (i=NR;i>0;i--) if (line[i] ~ /^[[:space:]]*}[[:space:]]*$/) { last=i; break }
+        prev=0; for (i=last-1;i>0;i--) { l=line[i]; sub(/^[[:space:]]+/,"",l); if (l!="" && l !~ /^\/\//) { prev=i; break } }
+        if (prev && line[prev] !~ /[,{][[:space:]]*$/) line[prev]=line[prev] ","
+        for (i=1;i<=NR;i++) {
+          if (i==last) { print "  " b; print ENVIRON["ONB_MENU_BODY"]; print "  " e }
+          print line[i]
+        }
+      }' "$tmp" >"$tmp.new" && mv "$tmp.new" "$tmp"
+  fi
+  if ! jsonc_valid "$tmp"; then
+    rm -f "$tmp"
+    onb_warn "$(t menu.invalid)"
+    return 1
+  fi
+  onb_write "$MENU_EXT" <"$tmp"
+  rm -f "$tmp"
+  if [[ $action == install ]]; then onb_say "$(t menu.installed "$(t menu.onboard)" "$MENU_EXT")"; else onb_say "$(t menu.removed)"; fi
+}
+
+# ---------------------------------------------------------------- first run
+# Optional and OFF by default: an XDG autostart entry that opens the wizard
+# once, only while no profile.json exists. Enable with `firstrun-hook enable`.
+FIRSTRUN_DESKTOP="$HOME/.config/autostart/omarchy-onboard.desktop"
+
+cmd_firstrun() {
+  [[ -f $ONB_PROFILE ]] && return 0
+  [[ -f $ONB_STATE/firstrun-shown ]] && return 0
+  mkdir -p "$ONB_STATE" && : >"$ONB_STATE/firstrun-shown"
+  local msg
+  msg="$(t firstboot.welcome)"$'\n'"$(t firstboot.key_menu)"$'\n'"$(t firstboot.key_help)"$'\n'"$(t firstboot.next)"
+  command -v notify-send >/dev/null 2>&1 && notify-send -a Omarchy "$(t menu.onboard)" "$msg"
+  if command -v omarchy-launch-floating-terminal-with-presentation >/dev/null 2>&1; then
+    omarchy-launch-floating-terminal-with-presentation "$(onb_self) wizard"
+  fi
+}
+
+cmd_firstrun_hook() {
+  case ${1:-status} in
+    enable)
+      onb_write "$FIRSTRUN_DESKTOP" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Omarchy onboarding (first run)
+Comment=Opens omarchy-onboard once while no profile exists
+Exec=$(onb_self) firstrun
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+      onb_say "$(t firstboot.hook_on)" ;;
+    disable)
+      if [[ -f $FIRSTRUN_DESKTOP ]]; then
+        onb_backup "$FIRSTRUN_DESKTOP"
+        rm -f "$FIRSTRUN_DESKTOP"
+      fi
+      onb_say "$(t firstboot.hook_off)" ;;
+    status)
+      if [[ -f $FIRSTRUN_DESKTOP ]]; then onb_say "$(t firstboot.hook_status_on "$FIRSTRUN_DESKTOP")"; else onb_say "$(t firstboot.hook_status_off)"; fi ;;
+    *) onb_warn "usage: omarchy-onboard firstrun-hook enable|disable|status"; return 2 ;;
+  esac
+}
+
 # ---------------------------------------------------------------- main
 main() {
   omarchy_i18n_load "${OMARCHY_LANG:-}"
@@ -432,6 +543,9 @@ main() {
     tutor) cmd_tutor ;;
     prompt) cmd_prompt "$@" ;;
     i18n-check) cmd_i18n_check "$@" ;;
+    menu) cmd_menu "$@" ;;
+    firstrun) cmd_firstrun ;;
+    firstrun-hook) cmd_firstrun_hook "$@" ;;
     help|--help|-h) usage ;;
     *) onb_warn "unknown command: $cmd"; usage; return 2 ;;
   esac
