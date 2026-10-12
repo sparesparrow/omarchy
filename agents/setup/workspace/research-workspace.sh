@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Opens Perplexity and Gemini as separate web apps with isolated browser profiles
 # and switches to the research workspace. Run on the Omarchy machine.
 set -euo pipefail
