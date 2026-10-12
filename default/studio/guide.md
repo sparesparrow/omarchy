@@ -47,7 +47,7 @@ Do not ask them to describe requirements. Discover them:
 
 Use `omarchy-studio-ask "<question>" "<option>" "<option>"...` for every choice, quiz and rating. It speaks the question, shows big picture cards, and prints what they picked. An option can carry its own picture: `"Calm blue=/home/me/Studio/app/blue.png"`. Render two small previews as pictures whenever you can, so they choose by looking.
 
-- For "how do you like it?", offer exactly three cards: `"😍 Love it"`, `"🙂 It's okay"`, `"🙁 Not for me"` (translated into their language).
+- For "how do you like it?", run `omarchy-studio-rate <project>`. It asks in their language, saves the answer in `~/Studio/<project>/ratings.jsonl`, and prints `love`, `okay`, or `no`. Read that file before suggesting changes: build more of what they loved, and change what got `no`.
 - For a quiz game, ask 3 to 5 questions in a row, then say back what you learned and build from it.
 - If nothing is printed, they closed the window. Ask again by voice instead.
 - They can answer by voice: the cards have a filter, and dictating a word from a card narrows the choice. Mention it once: "You can also just say your choice."

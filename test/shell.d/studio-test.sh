@@ -155,3 +155,16 @@ rm -f "$test_home/Studio/taste.json"
 if run omarchy-studio-quiz --lang en; then fail "a closed quiz fails"; fi
 [[ ! -e $test_home/Studio/taste.json ]] || fail "a closed quiz saves nothing"
 pass "closing the quiz saves nothing"
+
+# Rate: the answer is printed and remembered per project, in any language.
+printf '#!/bin/bash\nshift 3\necho "$1"\n' >"$test_bin/omarchy-studio-ask"
+chmod +x "$test_bin/omarchy-studio-ask"
+[[ $(run omarchy-studio-rate --lang cs game) == "love" ]] || fail "rate prints the id of the chosen card"
+grep -q '"rating":"love"' "$test_home/Studio/game/ratings.jsonl" || fail "rate remembers the answer"
+run omarchy-studio-rate game >/dev/null
+[[ $(wc -l <"$test_home/Studio/game/ratings.jsonl") -eq 2 ]] || fail "rate keeps every answer"
+if run omarchy-studio-rate ../escape 2>/dev/null; then fail "rate rejects path-like project names"; fi
+printf '#!/bin/bash\nexit 1\n' >"$test_bin/omarchy-studio-ask"
+if run omarchy-studio-rate other; then fail "a closed rating fails"; fi
+[[ ! -e $test_home/Studio/other ]] || fail "a closed rating saves nothing"
+pass "rate remembers how they felt, per project"
