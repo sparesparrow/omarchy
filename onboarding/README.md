@@ -2,37 +2,37 @@
 
 ## Česky
 
-Průvodce pro začátečníky, kteří přecházejí na Omarchy (třeba z KDE nebo Ubuntu). Vše je doplněk: původní soubory Omarchy se nemění.
+Průvodce pro začátečníky, kteří přecházejí na Omarchy (například z KDE nebo Ubuntu). Vše je přidané navíc: původní soubory Omarchy se nemění. Texty vykají; použité pojmy shrnuje [slovníček](../i18n/cs/GLOSSARY.md).
 
 Spuštění:
 
 ```bash
 omarchy-onboard            # průvodce: cíle, zkušenosti, denní používání → ~/.config/omarchy-onboarding/profile.json
-omarchy-onboard practice   # procvičení zkratek, které v systému opravdu jsou
-omarchy-onboard bindings   # osobní zkratky (Super + Alt + H procvičování, Super + Alt + J AI lektor)
-omarchy-onboard login      # přihlášení AI účtů přes prohlížeč, jeden po druhém
-omarchy-onboard voxtype    # diktování; na slabém procesoru doporučí angličtinu
-omarchy-onboard herdr      # základní plocha v Herdru podle profilu
+omarchy-onboard practice   # procvičení klávesových zkratek, které v systému opravdu jsou
+omarchy-onboard bindings   # vlastní zkratky (Super + Alt + H procvičování, Super + Alt + J AI lektor)
+omarchy-onboard login      # přihlášení k AI účtům přes prohlížeč, postupně jeden po druhém
+omarchy-onboard voxtype    # diktování; na slabém procesoru doporučí ponechat angličtinu
+omarchy-onboard herdr      # pracovní prostor v Herdru podle profilu
 omarchy-onboard plugins    # doporučené doplňky podle cílů (nic neinstaluje)
 omarchy-onboard tutor      # trpělivý český AI lektor v nainstalovaném agentovi
-omarchy-onboard menu install        # přidá podnabídku „Průvodce“ do nabídky Omarchy (Super + Mezerník)
+omarchy-onboard menu install        # přidá podnabídku „Průvodce pro začátečníky“ do nabídky Omarchy (Super + mezerník)
 omarchy-onboard menu remove         # odebere ji
-omarchy-onboard firstrun-hook enable|disable|status   # volitelné spuštění při přihlášení (výchozí: vypnuto)
+omarchy-onboard firstrun-hook enable|disable|status   # volitelné spuštění po přihlášení (ve výchozím stavu vypnuto)
 ```
 
-Nabídka: `menu install` upraví jen označený blok (`// >>> omarchy-onboard >>>`) v uživatelském souboru `~/.config/omarchy/extensions/omarchy-menu.jsonc`; ostatní položky zůstanou, před zápisem se soubor zálohuje a ověří. Upstream `bin/omarchy` ani systémová nabídka se nemění.
+Nabídka: `menu install` upraví jen označený blok (`// >>> omarchy-onboard >>>`) v uživatelském souboru `~/.config/omarchy/extensions/omarchy-menu.jsonc`; ostatní položky zůstanou beze změny. Před zápisem se soubor zálohuje a zkontroluje. Původní `bin/omarchy` ani systémová nabídka se nemění.
 
-První spuštění: `firstrun-hook enable` vytvoří `~/.config/autostart/omarchy-onboard.desktop`, který po přihlášení jednou otevře průvodce – jen dokud neexistuje `profile.json`. Ve výchozím stavu je vypnuto. Spouštění XDG autostart položek závisí na sezení (uwsm/Hyprland); kdo ho nemá, může do `~/.config/hypr/autostart.lua` přidat `omarchy-onboard firstrun`.
+První spuštění: `firstrun-hook enable` vytvoří `~/.config/autostart/omarchy-onboard.desktop`, který po přihlášení jednou otevře průvodce – jen dokud neexistuje `profile.json`. Ve výchozím stavu je tato funkce vypnutá. Zda se položky XDG autostart spouštějí, záleží na sezení (uwsm/Hyprland); pokud ne, můžete do `~/.config/hypr/autostart.lua` přidat řádek `omarchy-onboard firstrun`.
 
 Bezpečnost:
 
 - Zapisuje jen do `~/.config` a `~/.local`.
-- Před úpravou vždy zálohuje do `~/.local/state/omarchy-onboarding/backups/`.
-- Po každé změně Hyprlandu spustí `hyprctl reload` a `hyprctl configerrors`; při nové chybě vrátí zálohu.
-- Před instalací se ptá; `sudo` nikdy nespouští sám, jen vypíše příkaz.
-- Nikdy nežádá API klíče a nezapíná placené použití.
+- Před každou úpravou vytvoří zálohu v `~/.local/state/omarchy-onboarding/backups/`.
+- Po každé změně nastavení Hyprlandu spustí `hyprctl reload` a `hyprctl configerrors`; pokud se objeví nová chyba, obnoví zálohu.
+- Před každou změnou a instalací se zeptá. `sudo` nikdy nespouští sám – jen vypíše příkaz, který můžete spustit vy.
+- Nikdy nežádá API klíče a nezapíná placené služby.
 
-Čeština v diktování: vícejazyčný model `base` umí česky, ale na slabém procesoru (např. Intel Atom) trvá přepis věty i minuty. Průvodce proto zkontroluje procesor a na slabém stroji nechá `base.en`.
+Čeština při diktování: vícejazyčný model `base` češtinu zvládá, ale na slabém procesoru (např. Intel Atom) může přepis jedné věty trvat i minuty. Průvodce proto nejdřív zkontroluje procesor a na slabém počítači doporučí ponechat `base.en`.
 
 ## English summary
 

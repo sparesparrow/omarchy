@@ -60,7 +60,7 @@ choose_many() {
     return 0
   fi
   for i in "${!labels[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2; done
-  read -r -p "> (např. 1 3) " answer
+  read -r -p "> (čísla oddělená mezerou, např. 1 3) " answer
   for i in $answer; do
     [[ $i =~ ^[0-9]+$ ]] && (( i >= 1 && i <= ${#keys[@]} )) && printf '%s\n' "${keys[$((i - 1))]}"
   done
@@ -241,15 +241,15 @@ PRACTICE_ITEMS=(
   "Omarchy menu|otevřít nabídku Omarchy"
   "Terminal|otevřít terminál"
   "Browser|otevřít prohlížeč"
-  "Keybindings|zobrazit přehled všech zkratek"
+  "Keybindings|zobrazit přehled všech klávesových zkratek"
   "Close window|zavřít okno"
-  "Toggle window floating/tiling|přepnout okno mezi plovoucím a dlaždicovým"
+  "Toggle window floating/tiling|přepnout okno mezi plovoucím a dlaždicovým režimem"
   "File manager|otevřít správce souborů"
   "Clipboard manager|otevřít historii schránky"
-  "Emojis|vložit emoji"
+  "Emojis|vybrat a vložit emoji"
   "Screenshot|pořídit snímek obrazovky"
   "Toggle dictation|zapnout nebo vypnout diktování"
-  "System menu|systémová nabídka (uspat, vypnout…)"
+  "System menu|otevřít systémovou nabídku (uspat, vypnout…)"
 )
 
 normalize_chord() {
@@ -274,7 +274,7 @@ cmd_practice() {
       answers+=("$chords")
     fi
   done
-  (( ${#missing[@]} )) && onb_say "$(t practice.missing "$(IFS=,; echo "${missing[*]}")")"
+  (( ${#missing[@]} )) && onb_say "$(t practice.missing "$(printf '%s; ' "${missing[@]}" | sed 's/; $//')")"
   if (( ! ${#questions[@]} )); then
     onb_warn "$(t practice.none)"
     return 1
@@ -324,7 +324,7 @@ cmd_voxtype() {
   [[ -f $cfg ]] || { onb_warn "$cfg missing"; return 0; }
   onb_confirm "$(t voice.set_cs)" || { onb_say "$(t notify.skipped)"; return 0; }
   sed -E 's/^model = .*/model = "base"/; s/^language = .*/language = "cs"/' "$cfg" | onb_write "$cfg"
-  onb_say "voxtype setup model   # stáhne model base, pokud chybí"
+  onb_say "voxtype setup model   # stáhne model base, pokud ještě chybí"
   systemctl --user restart voxtype 2>/dev/null || true
 }
 

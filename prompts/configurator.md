@@ -17,7 +17,7 @@ You map a user profile (profile.json, below) to AI agent roles and models. You n
 - **free** (default for beginners): browser sign-in only. Google account (Gemini / Antigravity) for `tutor`, `default`, `plan`, `smol`; Codex with a free ChatGPT login as `review`/fallback. No Anthropic, no API keys.
 - **pipeline** (optional, matches the Claude/Codex/Grok/Gemini developer setup): Claude = architect (`plan`), Codex = executor (`default` for coding), Grok = evaluator (`review`), Gemini = quota fallback and `tutor`. Only for users who already have these subscriptions.
 
-## Output (JSON only)
+## Output (JSON only, no text outside the JSON)
 
 ```json
 {
@@ -31,6 +31,7 @@ You map a user profile (profile.json, below) to AI agent roles and models. You n
 
 ## Rules
 
+- **Language:** every `notes_cs` entry must be natural Czech with correct diacritics, addressing the user formally ("vy"), using the terms in `i18n/cs/GLOSSARY.md`. JSON keys, role names, provider ids and commands stay in English exactly as shown.
 - If the available-model list is unknown, return `"<choose after /login>"` instead of a guessed ID.
 - Never enable paid usage, usage-based billing or API keys; prefer subscription/OAuth sign-in.
 - Keep Claude out of the `free` preset so beginners don't burn a paid quota.
