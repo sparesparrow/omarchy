@@ -371,8 +371,9 @@ cmd_plugins() {
 
 # ---------------------------------------------------------------- prompts / tutor
 cmd_prompt() {
-  local name="${1:-tutor}" file="$ONB_ROOT/prompts/${1:-tutor}.md"
-  [[ -f $file ]] || { onb_warn "unknown prompt: $name"; return 2; }
+  local name="${1:-tutor}" file
+  file="$ONB_ROOT/prompts/$name.md"
+  [[ $name =~ ^[a-z0-9_-]+$ && -f $file ]] || { onb_warn "unknown prompt: $name"; return 2; }
   cat "$file"
   if [[ -f $ONB_PROFILE ]]; then
     printf '\n## Profil uživatele (profile.json)\n\n```json\n'
@@ -397,7 +398,7 @@ cmd_tutor() {
 # ---------------------------------------------------------------- i18n
 cmd_i18n_check() {
   local lang="${1:-}" key nmissing=0
-  [[ -n $lang ]] || { onb_warn "usage: omarchy-onboard i18n-check <lang>"; return 2; }
+  [[ $lang =~ ^[A-Za-z0-9_-]+$ ]] || { onb_warn "usage: omarchy-onboard i18n-check <lang>"; return 2; }
   omarchy_i18n_load cs
   local -a keys=("${!MSG[@]}")
   if [[ ! -d $ONB_ROOT/i18n/$lang ]]; then
