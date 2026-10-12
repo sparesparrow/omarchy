@@ -63,5 +63,7 @@ done
 
 omarchy-studio-say "${say_args[@]}" "$question" &
 
-omarchy-menu-images --print-name --show-labels "$cards"
+# --filterable lets dictation answer: spoken words are typed into the filter,
+# which narrows the cards to the one they said.
+omarchy-menu-images --print-name --show-labels --filterable "$cards"
 wait

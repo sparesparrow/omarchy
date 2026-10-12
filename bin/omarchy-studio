@@ -25,4 +25,5 @@ cd "$HOME/Studio"
 
 # The agent speaks first, so someone who has never typed to a computer is
 # greeted rather than faced with an empty prompt.
-exec omarchy-agent --prompt "Read $OMARCHY_PATH/default/studio/guide.md and follow it. The person's locale language is '$lang'. Greet them warmly in that language, speak the greeting aloud, and ask what they would like to make."
+# --pick offers the agent choice when none is set, instead of failing.
+exec omarchy-agent --pick --prompt "Read $OMARCHY_PATH/default/studio/guide.md and follow it. The person's locale language is '$lang'. Greet them warmly in that language, speak the greeting aloud, and ask what they would like to make."

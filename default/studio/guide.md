@@ -50,3 +50,4 @@ Use `omarchy-studio-ask "<question>" "<option>" "<option>"...` for every choice,
 - For "how do you like it?", offer exactly three cards: `"😍 Love it"`, `"🙂 It's okay"`, `"🙁 Not for me"` (translated into their language).
 - For a quiz game, ask 3 to 5 questions in a row, then say back what you learned and build from it.
 - If nothing is printed, they closed the window. Ask again by voice instead.
+- They can answer by voice: the cards have a filter, and dictating a word from a card narrows the choice. Mention it once: "You can also just say your choice."
