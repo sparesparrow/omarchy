@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# omarchy:summary=Ask how they like a result and remember the answer
+# omarchy:args=[--lang <code>] <project>
+# omarchy:hidden=true
+
+# Prints love, okay, or no, and appends it to ~/Studio/<project>/ratings.jsonl so
+# the agent can see what they loved across versions instead of asking again.
+
+lang=""
+if [[ ${1:-} == "--lang" ]]; then
+  lang=${2:?--lang needs a value}
+  shift 2
+fi
+if (($# != 1)) || [[ $1 == */* || $1 == .* ]]; then
+  echo "Usage: omarchy studio rate [--lang <code>] <project>" >&2
+  exit 1
+fi
+project=$1
+
+if [[ -z $lang ]]; then
+  lang=${LC_MESSAGES:-${LANG:-en}}
+  lang=${lang%%[_.@]*}
+fi
+
+case "$lang" in
+cs) question="Jak se vám to líbí?"; labels=("😍 Moc se mi to líbí" "🙂 Ujde to" "🙁 Není to ono") ;;
+es) question="¿Qué te parece?"; labels=("😍 Me encanta" "🙂 Está bien" "🙁 No es lo mío") ;;
+de) question="Wie gefällt es dir?"; labels=("😍 Ich liebe es" "🙂 Geht so" "🙁 Nicht mein Ding") ;;
+*) lang="en"; question="How do you like it?"; labels=("😍 Love it" "🙂 It's okay" "🙁 Not for me") ;;
+esac
+ids=(love okay no)
+
+answer=$(omarchy-studio-ask --lang "$lang" "$question" "${labels[@]}") || exit 1
+for i in "${!labels[@]}"; do
+  if [[ ${labels[i]} == "$answer" ]]; then
+    mkdir -p "$HOME/Studio/$project"
+    printf '{"time":"%s","rating":"%s"}\n' "$(date -Is)" "${ids[i]}" >>"$HOME/Studio/$project/ratings.jsonl"
+    printf '%s\n' "${ids[i]}"
+    exit 0
+  fi
+done
+exit 1

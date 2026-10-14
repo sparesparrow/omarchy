@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# omarchy:summary=Listen hands-free until the person stops talking, then send what they said
+# omarchy:args=[--timeout <seconds>]
+
+timeout=60
+if [[ ${1:-} == "--timeout" ]]; then
+  timeout=${2:?--timeout needs a value}
+fi
+
+# Recording starts now and stops by itself after a pause, so nobody has to find
+# a key. The dictation backend types the transcript where the cursor is, which
+# is the agent's prompt, and Return then sends it.
+omarchy-dictation start || exit 1
+trap 'omarchy-dictation stop' EXIT
+
+spoke=false
+while IFS= read -r line; do
+  case "$line" in
+  *silence_end*) spoke=true ;;
+  # Silence before anyone has spoken is only waiting; after speech it is the
+  # end of what they wanted to say.
+  *silence_start*) [[ $spoke == "true" ]] && break ;;
+  esac
+done < <(timeout "$timeout" ffmpeg -nostdin -hide_banner -f pulse -i default \
+  -af silencedetect=noise=-35dB:d=1.5 -f null - 2>&1)
+
+[[ $spoke == "true" ]] || exit 0
+
+omarchy-dictation stop
+trap - EXIT
+
+# Give the backend time to transcribe and type before sending.
+for _ in {1..50}; do
+  sleep 0.2
+  [[ $(voxtype status 2>/dev/null) == "idle" ]] && break
+done
+wtype -k Return

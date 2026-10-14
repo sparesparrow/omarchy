@@ -1,0 +1,179 @@
+#!/bin/bash
+
+source "$(dirname "$0")/base-test.sh"
+
+test_bin=$(mktemp -d)
+test_home=$(mktemp -d)
+log_file=$(mktemp)
+trap 'rm -rf "$test_bin" "$test_home"; rm -f "$log_file"' EXIT
+
+cat >"$test_bin/omarchy-agent" <<'EOF2'
+#!/bin/bash
+echo "cwd:$PWD" >>"$TEST_LOG"
+echo "args:$*" >>"$TEST_LOG"
+EOF2
+cat >"$test_bin/spd-say" <<'EOF2'
+#!/bin/bash
+echo "spd:$*" >>"$TEST_LOG"
+EOF2
+chmod +x "$test_bin"/*
+
+run() {
+  HOME="$test_home" OMARCHY_PATH="$ROOT" PATH="$test_bin:$ROOT/bin:$PATH" TEST_LOG="$log_file" "$@"
+}
+
+run omarchy-studio --lang cs
+grep -q "^cwd:$test_home/Studio$" "$log_file" || fail "studio starts in the Studio folder"
+grep -q "guide.md" "$log_file" || fail "studio hands the guide to the agent"
+grep -q "language is 'cs'" "$log_file" || fail "studio passes the chosen language"
+[[ -f $ROOT/default/studio/guide.md ]] || fail "the studio guide ships with Omarchy"
+pass "studio launches the agent with the guide"
+
+LANG=de_DE.UTF-8 LC_MESSAGES= run omarchy-studio
+grep -q "language is 'de'" "$log_file" || fail "studio derives the language from the locale"
+pass "studio derives language from locale"
+
+: >"$log_file"
+run omarchy-studio-say --lang cs "Ahoj"
+grep -qx 'spd:--wait -l cs -- Ahoj' "$log_file" || fail "say speaks in the requested language"
+pass "say speaks in the requested language"
+
+if run omarchy-studio-say 2>/dev/null; then fail "say without text fails"; fi
+pass "say requires text"
+
+# Multilingual dictation: Voxtype's English-only model is replaced once.
+cfg_home=$(mktemp -d)
+mkdir -p "$cfg_home/voxtype"
+printf '[whisper]\nmodel = "base.en"\nlanguage = "en"\n' >"$cfg_home/voxtype/config.toml"
+cat >"$test_bin/omarchy-default-dictation" <<'EOF2'
+#!/bin/bash
+echo voxtype
+EOF2
+cat >"$test_bin/voxtype" <<'EOF2'
+#!/bin/bash
+echo "voxtype:$*" >>"$TEST_LOG"
+EOF2
+cat >"$test_bin/systemctl" <<'EOF2'
+#!/bin/bash
+echo "systemctl:$*" >>"$TEST_LOG"
+EOF2
+chmod +x "$test_bin"/*
+: >"$log_file"
+XDG_CONFIG_HOME="$cfg_home" run omarchy-studio-language
+grep -qx 'model = "base"' "$cfg_home/voxtype/config.toml" || fail "English-only model is replaced"
+grep -qx 'language = "auto"' "$cfg_home/voxtype/config.toml" || fail "language is detected automatically"
+grep -q 'voxtype:setup --download' "$log_file" || fail "multilingual model is downloaded"
+: >"$log_file"
+XDG_CONFIG_HOME="$cfg_home" run omarchy-studio-language
+[[ ! -s $log_file ]] || fail "an already multilingual setup is left alone"
+rm -rf "$cfg_home"
+pass "studio switches dictation to a multilingual model once"
+
+# Invitation fires once, and only with a default agent.
+cat >"$test_bin/omarchy-default-agent" <<'EOF2'
+#!/bin/bash
+echo claude
+EOF2
+cat >"$test_bin/omarchy-done" <<'EOF2'
+#!/bin/bash
+m="$HOME/.m-$2"; [[ -e $m ]] && exit 1; touch "$m"
+EOF2
+cat >"$test_bin/omarchy-notification-send" <<'EOF2'
+#!/bin/bash
+echo "notify" >>"$TEST_LOG"
+EOF2
+chmod +x "$test_bin"/*
+: >"$log_file"
+run bash "$ROOT/install/user/first-run/setup-studio.hook"
+run bash "$ROOT/install/user/first-run/setup-studio.hook"
+[[ $(grep -c '^notify$' "$log_file") -eq 1 ]] || fail "studio invitation is sent once"
+pass "studio invitation is sent once"
+
+# Ask: cards are made per option and the chosen label comes back.
+cat >"$test_bin/omarchy-menu-images" <<'EOF2'
+#!/bin/bash
+dir=${@: -1}
+ls "$dir" >>"$TEST_LOG"
+echo "Love it"
+EOF2
+chmod +x "$test_bin/omarchy-menu-images"
+: >"$log_file"
+answer=$(run omarchy-studio-ask "Do you like it?" "Love it" "Not for me")
+[[ $answer == "Love it" ]] || fail "ask prints the chosen label" "$answer"
+grep -qx 'Love it.png' "$log_file" && grep -qx 'Not for me.png' "$log_file" || fail "ask draws a card per option"
+if run omarchy-studio-ask "One?" "Only" 2>/dev/null; then fail "ask needs two options"; fi
+if run omarchy-studio-ask "Dup?" "A" "A" 2>/dev/null; then fail "ask rejects duplicate labels"; fi
+pass "ask shows picture cards and returns the choice"
+
+# Listen: speech then a pause stops dictation and sends Return; silence alone does not.
+for bin in omarchy-dictation wtype; do
+  printf '#!/bin/bash\necho "%s:$*" >>"$TEST_LOG"\n' "$bin" >"$test_bin/$bin"
+done
+printf '#!/bin/bash\necho idle\n' >"$test_bin/voxtype"
+chmod +x "$test_bin"/*
+printf '#!/bin/bash\necho "silence_start: 0"\necho "silence_end: 2"\necho "silence_start: 5"\n' >"$test_bin/ffmpeg"
+chmod +x "$test_bin/ffmpeg"
+: >"$log_file"
+run omarchy-studio-listen
+grep -qx 'omarchy-dictation:start' "$log_file" && grep -qx 'omarchy-dictation:stop' "$log_file" &&
+  grep -qx 'wtype:-k Return' "$log_file" || fail "listen records, stops after a pause, and sends"
+printf '#!/bin/bash\necho "silence_start: 0"\n' >"$test_bin/ffmpeg"
+: >"$log_file"
+run omarchy-studio-listen
+grep -q wtype "$log_file" && fail "listen sends nothing when nobody spoke"
+grep -qx 'omarchy-dictation:stop' "$log_file" || fail "listen stops recording when nobody spoke"
+pass "listen stops after a pause and sends only when spoken to"
+
+# A language chosen on purpose survives; only the English default widens.
+cfg_home=$(mktemp -d); mkdir -p "$cfg_home/voxtype"
+printf '[whisper]\nmodel = "base.en"\nlanguage = "cs"\n' >"$cfg_home/voxtype/config.toml"
+XDG_CONFIG_HOME="$cfg_home" run omarchy-studio-language
+grep -qx 'language = "cs"' "$cfg_home/voxtype/config.toml" || fail "an explicit language is kept"
+grep -qx 'model = "base"' "$cfg_home/voxtype/config.toml" || fail "the English-only model is still replaced"
+rm -rf "$cfg_home"
+pass "studio keeps an explicitly chosen dictation language"
+
+# Quiz: answers are saved by id, in any language.
+cat >"$test_bin/omarchy-studio-ask" <<'EOF2'
+#!/bin/bash
+# Picks the second card of every question.
+shift 3
+echo "$2"
+EOF2
+chmod +x "$test_bin/omarchy-studio-ask"
+run omarchy-studio-quiz --lang cs
+grep -q '"make":"story","feeling":"fun","colors":"orange"' "$test_home/Studio/taste.json" || fail "quiz saves ids, not labels" "$(<"$test_home/Studio/taste.json")"
+grep -q '"language":"cs"' "$test_home/Studio/taste.json" || fail "quiz records the language"
+rm -f "$test_home/Studio/taste.json"
+run omarchy-studio-quiz --lang xx
+grep -q '"language":"en"' "$test_home/Studio/taste.json" || fail "unknown language falls back to English"
+pass "quiz saves answers by id in any language"
+
+# Closing the quiz saves nothing.
+printf '#!/bin/bash\nexit 1\n' >"$test_bin/omarchy-studio-ask"
+rm -f "$test_home/Studio/taste.json"
+if run omarchy-studio-quiz --lang en; then fail "a closed quiz fails"; fi
+[[ ! -e $test_home/Studio/taste.json ]] || fail "a closed quiz saves nothing"
+pass "closing the quiz saves nothing"
+
+# Rate: the answer is printed and remembered per project, in any language.
+printf '#!/bin/bash\nshift 3\necho "$1"\n' >"$test_bin/omarchy-studio-ask"
+chmod +x "$test_bin/omarchy-studio-ask"
+[[ $(run omarchy-studio-rate --lang cs game) == "love" ]] || fail "rate prints the id of the chosen card"
+grep -q '"rating":"love"' "$test_home/Studio/game/ratings.jsonl" || fail "rate remembers the answer"
+run omarchy-studio-rate game >/dev/null
+[[ $(wc -l <"$test_home/Studio/game/ratings.jsonl") -eq 2 ]] || fail "rate keeps every answer"
+if run omarchy-studio-rate ../escape 2>/dev/null; then fail "rate rejects path-like project names"; fi
+printf '#!/bin/bash\nexit 1\n' >"$test_bin/omarchy-studio-ask"
+if run omarchy-studio-rate other; then fail "a closed rating fails"; fi
+[[ ! -e $test_home/Studio/other ]] || fail "a closed rating saves nothing"
+pass "rate remembers how they felt, per project"
+
+# The invitation speaks Czech to Czech speakers, with formal address.
+printf '#!/bin/bash\necho "notify:$*" >>"$TEST_LOG"\n' >"$test_bin/omarchy-notification-send"
+chmod +x "$test_bin/omarchy-notification-send"
+rm -f "$test_home"/.m-*
+: >"$log_file"
+LC_MESSAGES=cs_CZ.UTF-8 run bash "$ROOT/install/user/first-run/setup-studio.hook"
+grep -q 'Tvořte hlasem' "$log_file" && grep -q 'Stiskněte' "$log_file" || fail "invitation is in Czech for Czech speakers"
+pass "studio invitation speaks Czech"

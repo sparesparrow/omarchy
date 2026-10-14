@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# omarchy:summary=Ask the person a question with big picture cards and print their choice
+# omarchy:args=[--lang <code>] <question> <option[=image]>...
+# omarchy:examples=omarchy studio ask "Which do you like?" "Calm blue=blue.png" "Warm orange=orange.png" | omarchy studio ask "How do you feel about it?" "😍 Love it" "🙂 It's okay" "🙁 Not for me"
+
+# Studio's quizzes and rating games all come through here, so someone who
+# can't read well, or at all, still answers by looking and pointing. Options
+# without an image get a big colored card with their label drawn on it. The
+# chosen label is printed on stdout; nothing is printed when they dismiss it.
+
+say_args=()
+if [[ ${1:-} == "--lang" ]]; then
+  say_args=(--lang "${2:?--lang needs a value}")
+  shift 2
+fi
+
+if (($# < 3)); then
+  echo "Usage: omarchy studio ask [--lang <code>] <question> <option[=image]>..." >&2
+  exit 1
+fi
+
+question=$1
+shift
+
+cards=$(mktemp -d)
+trap 'rm -rf "$cards"' EXIT
+
+colors=("#5b8def" "#f2994a" "#27ae60" "#bb6bd9" "#eb5757" "#2d9cdb" "#f2c94c" "#4f4f4f")
+declare -A seen
+index=0
+for option in "$@"; do
+  label=${option%%=*}
+  image=""
+  [[ $option == *=* ]] && image=${option#*=}
+
+  # A label is the card's file name and what comes back, so it must be unique
+  # and free of path characters.
+  name=${label//\//-}
+  if [[ -n ${seen[$name]:-} ]]; then
+    echo "Duplicate option: $label" >&2
+    exit 1
+  fi
+  seen[$name]=1
+
+  if [[ -n $image && -f $image ]]; then
+    ln -s "$(readlink -f "$image")" "$cards/$name.${image##*.}"
+  else
+    color=${colors[index % ${#colors[@]}]}
+    markup=${label//&/&amp;}
+    markup=${markup//</&lt;}
+    markup=${markup//>/&gt;}
+    # Pango draws emoji, which ImageMagick's own fonts cannot; caption is the
+    # fallback when it is not built in.
+    magick -background "$color" -fill white \
+      pango:"<span font=\"Sans\" size=\"48000\">$markup</span>" \
+      -gravity center -extent 600x360 "$cards/$name.png" 2>/dev/null ||
+      magick -size 600x360 -background "$color" -fill white -gravity center \
+        -pointsize 48 caption:"$label" "$cards/$name.png"
+  fi
+  index=$((index + 1))
+done
+
+omarchy-studio-say "${say_args[@]}" "$question" &
+
+# --filterable lets dictation answer: spoken words are typed into the filter,
+# which narrows the cards to the one they said.
+omarchy-menu-images --print-name --show-labels --filterable "$cards"
+wait

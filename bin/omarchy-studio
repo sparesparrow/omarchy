@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# omarchy:summary=Build anything by talking, with a guide made for non-programmers
+# omarchy:args=[--lang <code>]
+# omarchy:examples=omarchy studio | omarchy studio --lang cs
+
+lang=""
+if [[ ${1:-} == "--lang" ]]; then
+  lang=${2:?--lang needs a value}
+elif (($# > 0)); then
+  echo "Usage: omarchy studio [--lang <code>]" >&2
+  exit 1
+fi
+
+if [[ -z $lang ]]; then
+  lang=${LC_MESSAGES:-${LANG:-en}}
+  lang=${lang%%[_.@]*}
+fi
+[[ $lang == "C" || $lang == "POSIX" || -z $lang ]] && lang="en"
+
+omarchy-studio-language
+
+mkdir -p "$HOME/Studio"
+cd "$HOME/Studio"
+
+# The agent speaks first, so someone who has never typed to a computer is
+# greeted rather than faced with an empty prompt.
+# First time, play the picture quiz: it needs no sign-in and tells the agent
+# what to start with. Closing it early just skips it.
+[[ -f $HOME/Studio/taste.json ]] || omarchy-studio-quiz --lang "$lang" || true
+
+# --pick offers the agent choice when none is set, instead of failing.
+exec omarchy-agent --pick --prompt "Read $OMARCHY_PATH/default/studio/guide.md and follow it. The person's locale language is '$lang'. Greet them warmly in that language, speak the greeting aloud, and ask what they would like to make. If ~/Studio/taste.json exists, read it first and start from what it says they like instead of asking again."

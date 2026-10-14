@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# omarchy:summary=Play a short picture quiz that tells Studio what you like
+# omarchy:args=[--lang <code>]
+# omarchy:hidden=true
+
+# Needs no agent and no sign-in, so the very first thing a new person does is
+# play. The answers land in ~/Studio/taste.json, which the guide tells the agent
+# to read before asking anything.
+
+lang=""
+if [[ ${1:-} == "--lang" ]]; then
+  lang=${2:?--lang needs a value}
+fi
+if [[ -z $lang ]]; then
+  lang=${LC_MESSAGES:-${LANG:-en}}
+  lang=${lang%%[_.@]*}
+fi
+
+# Each question: a prompt, then option labels. Ids (second array) are what is
+# saved, so the file reads the same in every language.
+case "$lang" in
+cs)
+  prompts=("Co chcete vytvořit?" "Jaký pocit se vám líbí?" "Jaké barvy se vám líbí?")
+  a1=("🎮 Hru" "📖 Příběh" "🖼️ Stránku s fotkami" "🛠️ Pomocníka")
+  a2=("😌 Klid" "🎉 Zábavu" "💪 Sílu" "🧸 Útulnost")
+  a3=("🔵 Modrou" "🟠 Oranžovou" "🟢 Zelenou" "🟣 Fialovou")
+  ;;
+es)
+  prompts=("¿Qué te gustaría crear?" "¿Qué sensación te gusta?" "¿Qué colores te gustan?")
+  a1=("🎮 Un juego" "📖 Un cuento" "🖼️ Una página de fotos" "🛠️ Un ayudante")
+  a2=("😌 Calma" "🎉 Diversión" "💪 Fuerza" "🧸 Calidez")
+  a3=("🔵 Azul" "🟠 Naranja" "🟢 Verde" "🟣 Morado")
+  ;;
+de)
+  prompts=("Was möchtest du erschaffen?" "Welches Gefühl magst du?" "Welche Farben magst du?")
+  a1=("🎮 Ein Spiel" "📖 Eine Geschichte" "🖼️ Eine Fotoseite" "🛠️ Einen Helfer")
+  a2=("😌 Ruhe" "🎉 Spaß" "💪 Kraft" "🧸 Gemütlichkeit")
+  a3=("🔵 Blau" "🟠 Orange" "🟢 Grün" "🟣 Lila")
+  ;;
+*)
+  lang="en"
+  prompts=("What would you like to make?" "Which feeling do you like?" "Which colors do you like?")
+  a1=("🎮 A game" "📖 A story" "🖼️ A photo page" "🛠️ A helper")
+  a2=("😌 Calm" "🎉 Fun" "💪 Bold" "🧸 Cozy")
+  a3=("🔵 Blue" "🟠 Orange" "🟢 Green" "🟣 Purple")
+  ;;
+esac
+
+ids1=(game story photos helper)
+ids2=(calm fun bold cozy)
+ids3=(blue orange green purple)
+
+# Ask one question and print the saved id for the card that was chosen; nothing
+# if the window was closed.
+pick() {
+  local prompt=$1 ids_name=$2 labels_name=$3 answer i
+  local -n ids=$ids_name labels=$labels_name
+  answer=$(omarchy-studio-ask --lang "$lang" "$prompt" "${labels[@]}") || return 1
+  for i in "${!labels[@]}"; do
+    [[ ${labels[i]} == "$answer" ]] && printf '%s\n' "${ids[i]}" && return 0
+  done
+  return 1
+}
+
+make=$(pick "${prompts[0]}" ids1 a1) || exit 1
+feel=$(pick "${prompts[1]}" ids2 a2) || exit 1
+color=$(pick "${prompts[2]}" ids3 a3) || exit 1
+
+mkdir -p "$HOME/Studio"
+printf '{"language":"%s","make":"%s","feeling":"%s","colors":"%s"}\n' \
+  "$lang" "$make" "$feel" "$color" >"$HOME/Studio/taste.json"

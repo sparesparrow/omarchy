@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# omarchy:summary=Speak text aloud in the person's language
+# omarchy:args=[--lang <code>] <text...>
+# omarchy:examples=omarchy studio say "Hello" | omarchy studio say --lang cs "Ahoj"
+
+lang=""
+if [[ ${1:-} == "--lang" ]]; then
+  lang=${2:?--lang needs a value}
+  shift 2
+fi
+
+if (($# == 0)); then
+  echo "Usage: omarchy studio say [--lang <code>] <text...>" >&2
+  exit 1
+fi
+
+# A locale such as cs_CZ.UTF-8 reads as the language code cs.
+if [[ -z $lang ]]; then
+  lang=${LC_MESSAGES:-${LANG:-en}}
+  lang=${lang%%[_.@]*}
+fi
+[[ $lang == "C" || $lang == "POSIX" || -z $lang ]] && lang="en"
+
+text="$*"
+
+# Speech is a courtesy: the text is still on screen, so a missing engine is not
+# an error.
+if omarchy-cmd-present spd-say; then
+  exec spd-say --wait -l "$lang" -- "$text"
+elif omarchy-cmd-present espeak-ng; then
+  exec espeak-ng -v "$lang" -- "$text"
+fi
