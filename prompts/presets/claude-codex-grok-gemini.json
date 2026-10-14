@@ -1,0 +1,7 @@
+{
+  "id": "pipeline",
+  "description": "Optional developer preset: Claude architect, Codex executor, Grok evaluator, Gemini fallback",
+  "providers": ["claude", "codex", "grok", "gemini"],
+  "roles": {"plan": "claude", "default": "codex", "review": "grok", "tutor": "gemini", "smol": "gemini", "fallback": "gemini"},
+  "never": ["api-keys", "usage-billing"]
+}

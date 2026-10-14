@@ -1,0 +1,555 @@
+#!/bin/bash
+
+# omarchy:summary=Beginner onboarding wizard in Czech (profile, shortcuts, AI login, dictation, Herdr, plugins)
+# omarchy:args=[wizard|login|bindings|practice|voxtype|herdr|plugins|tutor|prompt <name>|i18n-check <lang>|menu install|remove|firstrun-hook enable|disable|status] [options]
+# omarchy:examples=omarchy-onboard | omarchy-onboard practice | omarchy-onboard wizard --non-interactive --goals web,ai --experience none
+
+# Safety: writes only under ~/.config and ~/.local, backs up before edits,
+# validates Hyprland after each change (rollback on new errors), asks before
+# installs, never runs sudo itself, never asks for or stores API keys.
+
+set -uo pipefail
+
+ONB_ROOT="${OMARCHY_ONBOARD_ROOT:-$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
+# shellcheck source-path=SCRIPTDIR/..
+# shellcheck source=i18n/load.sh
+source "$ONB_ROOT/i18n/load.sh"
+# shellcheck source=onboarding/lib.sh
+source "$ONB_ROOT/onboarding/lib.sh"
+
+usage() {
+  cat <<'USAGE'
+omarchy-onboard [command] [options]
+
+Commands:
+  wizard (default)   ask about goals, experience and daily use; save profile.json
+  login              sign in to AI providers one at a time (browser/OAuth only)
+  bindings           add personal Hyprland shortcuts generated from the profile
+  practice           quiz the shortcuts that really exist on this system
+  voxtype            dictation setup with a CPU check for Czech
+  herdr              create a starter Herdr workspace from the profile
+  plugins            goal-based plugin shortlist (nothing is installed)
+  tutor              start the patient Czech AI tutor in an installed agent CLI
+  prompt NAME        print a prompt (tutor|analyzer|configurator) with the profile
+  i18n-check LANG    list keys missing in a locale
+  menu install|remove   add/remove an "onboard" submenu in ~/.config/omarchy/extensions/omarchy-menu.jsonc
+  firstrun-hook enable|disable|status   optional autostart that opens the wizard once (off by default)
+
+Wizard options:
+  --non-interactive  use flags/defaults only     --yes   answer yes to confirmations
+  --lang cs          --goals web,office,coding,ai,media,learning
+  --experience none|some|pro                     --daily browser,terminal,editor,chat
+  --touch yes|no     --voice yes|no     --ai yes|no     --preset free|pipeline
+USAGE
+}
+
+# ---------------------------------------------------------------- choosers
+choose_many() {
+  # choose_many "question" key... -> prints chosen keys (one per line)
+  local question="$1" prefix="$2"
+  shift 2
+  local keys=("$@") labels=() i answer
+  for i in "${keys[@]}"; do labels+=("$(t "$prefix.$i")"); done
+  onb_say "$question" >&2
+  if command -v gum >/dev/null 2>&1; then
+    local picked
+    picked="$(gum choose --no-limit "${labels[@]}")" || true
+    for i in "${!labels[@]}"; do
+      grep -qxF -- "${labels[$i]}" <<<"$picked" && printf '%s\n' "${keys[$i]}"
+    done
+    return 0
+  fi
+  for i in "${!labels[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2; done
+  read -r -p "> (čísla oddělená mezerou, např. 1 3) " answer
+  for i in $answer; do
+    [[ $i =~ ^[0-9]+$ ]] && (( i >= 1 && i <= ${#keys[@]} )) && printf '%s\n' "${keys[$((i - 1))]}"
+  done
+}
+
+choose_one() {
+  local question="$1" prefix="$2"
+  shift 2
+  choose_many "$question" "$prefix" "$@" | head -n1
+}
+
+ask_yes_no() {
+  if onb_confirm "$1"; then echo yes; else echo no; fi
+}
+
+csv_to_json() {
+  jq -cn --arg s "$1" '$s | split(",") | map(select(length > 0))'
+}
+
+# ---------------------------------------------------------------- wizard
+cmd_wizard() {
+  local goals="" experience="" daily="" touch="" voice="" ai="" preset="" lang=""
+  while (( $# )); do
+    case $1 in
+      --non-interactive) ONB_NONINTERACTIVE=1 ;;
+      --yes|-y) ONB_ASSUME_YES=1 ;;
+      --lang) lang="$2"; shift ;;
+      --goals) goals="$2"; shift ;;
+      --experience) experience="$2"; shift ;;
+      --daily) daily="$2"; shift ;;
+      --touch) touch="$2"; shift ;;
+      --voice) voice="$2"; shift ;;
+      --ai) ai="$2"; shift ;;
+      --preset) preset="$2"; shift ;;
+      *) onb_warn "unknown option: $1"; usage; return 2 ;;
+    esac
+    shift
+  done
+  [[ -n $lang ]] && omarchy_i18n_load "$lang"
+
+  onb_say "== $(t wizard.title) =="
+  onb_say "$(t firstboot.welcome)"
+  onb_say "$(t firstboot.intro)"
+  onb_say "  • $(t firstboot.key_menu)"
+  onb_say "  • $(t firstboot.key_help)"
+  onb_say "  • $(t firstboot.key_terminal)"
+  onb_say ""
+
+  if (( ! ONB_NONINTERACTIVE )); then
+    [[ -n $goals ]] || goals="$(choose_many "$(t wizard.q_goals)" wizard.goal web office coding ai media learning | paste -sd,)"
+    [[ -n $experience ]] || experience="$(choose_one "$(t wizard.q_experience)" wizard.exp none some pro)"
+    [[ -n $daily ]] || daily="$(choose_many "$(t wizard.q_daily)" wizard.daily browser terminal editor chat | paste -sd,)"
+    [[ -n $touch ]] || touch="$(ask_yes_no "$(t wizard.q_touch)")"
+    [[ -n $voice ]] || voice="$(ask_yes_no "$(t wizard.q_voice)")"
+    [[ -n $ai ]] || ai="$(ask_yes_no "$(t wizard.q_ai)")"
+  fi
+  : "${goals:=web,learning}" "${experience:=none}" "${daily:=browser}" "${touch:=no}" "${voice:=no}" "${ai:=no}"
+  [[ $ai == "yes" && ,$goals, != *,ai,* ]] && goals="$goals,ai"
+  [[ $touch == "yes" ]] && goals="$goals,touch"
+  [[ $voice == "yes" ]] && goals="$goals,voice"
+  : "${preset:=free}"
+
+  local cpu_class cpu_model
+  { read -r cpu_class; read -r cpu_model; } < <(onb_cpu_class)
+
+  local json
+  json="$(jq -n \
+    --arg lang "$OMARCHY_I18N_LANG" --arg created "$(date -Iseconds)" \
+    --argjson goals "$(csv_to_json "$goals")" --arg experience "$experience" \
+    --argjson daily "$(csv_to_json "$daily")" \
+    --arg touch "$touch" --arg voice "$voice" --arg ai "$ai" --arg preset "$preset" \
+    --arg cpu_class "$cpu_class" --arg cpu_model "$cpu_model" \
+    '{version: 1, lang: $lang, created: $created, goals: ($goals | unique), experience: $experience,
+      daily: $daily, touch: ($touch == "yes"), voice: ($voice == "yes"), ai: ($ai == "yes"),
+      ai_preset: $preset, cpu: {class: $cpu_class, model: $cpu_model}}')"
+  printf '%s\n' "$json" | onb_write "$ONB_PROFILE" || return 1
+  onb_say ""
+  onb_say "$(t wizard.summary)"
+  jq . "$ONB_PROFILE"
+  onb_say "$(t wizard.saved "$ONB_PROFILE")"
+  onb_say ""
+  onb_say "$(t wizard.next_steps)"
+  onb_say "  1. $(t wizard.step.practice)"
+  onb_say "  2. $(t wizard.step.bindings)"
+  onb_has_goal ai && onb_say "  •  $(t wizard.step.login)"
+  onb_has_goal voice && onb_say "  •  $(t wizard.step.voice)"
+  { onb_has_goal ai || onb_has_goal coding; } && onb_say "  •  $(t wizard.step.herdr)"
+  onb_say "  •  $(t wizard.step.plugins)"
+}
+
+require_profile() {
+  [[ -f $ONB_PROFILE ]] && return 0
+  onb_warn "profile missing: run omarchy-onboard first ($ONB_PROFILE)"
+  return 1
+}
+
+# ---------------------------------------------------------------- login
+cmd_login() {
+  onb_say "$(t login.intro)"
+  onb_say "$(t login.never_keys)"
+  # Make sure no API key from the environment is used by the login flows.
+  unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN OPENAI_API_KEY XAI_API_KEY GROK_API_KEY GEMINI_API_KEY GOOGLE_API_KEY
+  local preset
+  preset="$(onb_profile_get .ai_preset 2>/dev/null || echo free)"
+  local providers=(gemini codex)
+  [[ $preset == "pipeline" ]] && providers=(claude codex grok gemini)
+  local p
+  for p in "${providers[@]}"; do
+    onb_say ""
+    onb_confirm "$(t login.provider "$p")" || { onb_say "$(t notify.skipped)"; continue; }
+    case $p in
+      claude|codex|grok)
+        if command -v omarchy-agent-account-add >/dev/null 2>&1; then
+          omarchy-agent-account-add "$p" || true
+        elif command -v "$p" >/dev/null 2>&1; then
+          case $p in
+            codex) codex login || true ;;
+            *) onb_say "$(t login.manual "$p" "$p" "/login")" ;;
+          esac
+        else
+          onb_say "$(t login.missing "$p" "omarchy install ai")"
+        fi
+        ;;
+      gemini)
+        if command -v omp >/dev/null 2>&1; then
+          onb_say "$(t login.manual "Google (Gemini/Antigravity)" "omp" "/login")"
+          if (( ! ONB_NONINTERACTIVE )); then omp || true; fi
+        elif command -v agy >/dev/null 2>&1; then
+          onb_say "$(t login.manual "Google (Antigravity)" "agy" "/login")"
+          if (( ! ONB_NONINTERACTIVE )); then agy || true; fi
+        else
+          onb_say "$(t login.missing "Gemini" "omarchy install ai")"
+        fi
+        ;;
+    esac
+    onb_say "$(t login.done "$p")"
+  done
+}
+
+# ---------------------------------------------------------------- bindings
+cmd_bindings() {
+  require_profile || return 1
+  local file="$HYPR_DIR/bindings.lua" lines=() chord desc cmd owner mods before=""
+  local self
+  self="$(onb_self)"
+  local -a wanted=("SUPER + ALT + H|Procvičit zkratky|xdg-terminal-exec bash -lc '$self practice; exec bash'")
+  if onb_has_goal ai; then
+    wanted+=("SUPER + ALT + J|AI lektor|xdg-terminal-exec bash -lc '$self tutor; exec bash'")
+  fi
+  if onb_has_goal touch && command -v wvkbd-mobintl >/dev/null 2>&1; then
+    wanted+=("SUPER + ALT + O|Klávesnice na obrazovce|pkill -x wvkbd-mobintl || wvkbd-mobintl -L 300")
+  fi
+  local item
+  for item in "${wanted[@]}"; do
+    IFS='|' read -r chord desc cmd <<<"$item"
+    # The printed listing uses "SUPER ALT + H" (modifiers space-separated).
+    mods="${chord% + *}"
+    owner="$(onb_chord_owner "${mods// + / } + ${chord##* + }")"
+    if [[ -n $owner && $owner != "$desc" ]]; then
+      onb_say "$(t notify.chord_taken "$chord" "$owner")"
+      continue
+    fi
+    lines+=("o.bind(\"$chord\", \"$desc\", \"${cmd//\"/\\\"}\")")
+    onb_say "$(t notify.chord_added "$chord" "$desc")"
+  done
+  (( ${#lines[@]} )) || return 0
+  onb_say "$file:"
+  printf '  %s\n' "${lines[@]}"
+  onb_confirm "$(t confirm.apply)" || { onb_say "$(t notify.skipped)"; return 0; }
+  onb_hypr_running && before="$(onb_hypr_errors)"
+  # Process substitution (not a pipe) so the change flags reach onb_hypr_validate.
+  onb_lua_block "$file" bindings < <(printf '%s\n' "-- Generated by omarchy-onboard from $ONB_PROFILE" "${lines[@]}")
+  onb_hypr_validate "$file" "$before"
+}
+
+# ---------------------------------------------------------------- practice
+PRACTICE_ITEMS=(
+  "Omarchy menu|otevřít nabídku Omarchy"
+  "Terminal|otevřít terminál"
+  "Browser|otevřít prohlížeč"
+  "Keybindings|zobrazit přehled všech klávesových zkratek"
+  "Close window|zavřít okno"
+  "Toggle window floating/tiling|přepnout okno mezi plovoucím a dlaždicovým režimem"
+  "File manager|otevřít správce souborů"
+  "Clipboard manager|otevřít historii schránky"
+  "Emojis|vybrat a vložit emoji"
+  "Screenshot|pořídit snímek obrazovky"
+  "Toggle dictation|zapnout nebo vypnout diktování"
+  "System menu|otevřít systémovou nabídku (uspat, vypnout…)"
+)
+
+normalize_chord() {
+  tr '[:lower:]' '[:upper:]' <<<"$1" | sed -E 's/\+/ /g; s/MEZERN[IÍ]K/SPACE/g; s/\bENTER\b/RETURN/g; s/\bESC\b/ESCAPE/g; s/[[:space:]]+/ /g; s/^ //; s/ $//'
+}
+
+cmd_practice() {
+  local listing
+  listing="$(onb_keybindings)"
+  if [[ -z $listing ]]; then
+    onb_warn "$(t practice.none)"
+    return 1
+  fi
+  local item desc label chords missing=() questions=() answers=()
+  for item in "${PRACTICE_ITEMS[@]}"; do
+    IFS='|' read -r desc label <<<"$item"
+    chords="$(awk -v d="$desc" -F'→' '{ c=$1; x=$2; sub(/^[[:space:]]+/, "", x); sub(/[[:space:]]+$/, "", c); if (x == d) print c }' <<<"$listing" | paste -sd'|')"
+    if [[ -z $chords ]]; then
+      missing+=("$label")
+    else
+      questions+=("$label")
+      answers+=("$chords")
+    fi
+  done
+  (( ${#missing[@]} )) && onb_say "$(t practice.missing "$(printf '%s; ' "${missing[@]}" | sed 's/; $//')")"
+  if (( ! ${#questions[@]} )); then
+    onb_warn "$(t practice.none)"
+    return 1
+  fi
+  onb_say "$(t practice.intro)"
+  local i reply score=0 asked=0 ok c
+  for i in "${!questions[@]}"; do
+    if (( ONB_NONINTERACTIVE )); then
+      onb_say "  ${questions[$i]} = ${answers[$i]//|/ / }"
+      continue
+    fi
+    read -r -p "$(t practice.ask "${questions[$i]}") " reply || break
+    [[ $reply == "q" ]] && break
+    [[ -z $reply ]] && continue
+    asked=$((asked + 1))
+    ok=0
+    IFS='|' read -r -a chord_list <<<"${answers[$i]}"
+    for c in "${chord_list[@]}"; do
+      [[ $(normalize_chord "$reply") == "$(normalize_chord "$c")" ]] && ok=1
+    done
+    if (( ok )); then
+      score=$((score + 1))
+      onb_say "  $(t practice.correct)"
+    else
+      onb_say "  $(t practice.wrong "${answers[$i]//|/ / }")"
+    fi
+  done
+  (( ONB_NONINTERACTIVE )) || onb_say "$(t practice.score "$score" "$asked")"
+}
+
+# ---------------------------------------------------------------- voxtype
+cmd_voxtype() {
+  local cpu_class cpu_model cfg="$HOME/.config/voxtype/config.toml"
+  { read -r cpu_class; read -r cpu_model; } < <(onb_cpu_class)
+  if ! command -v voxtype >/dev/null 2>&1; then
+    onb_say "$(t voice.install)"
+    onb_say "$(t notify.needs_sudo)"
+    onb_say "  omarchy install dictation voxtype"
+    return 0
+  fi
+  onb_say "$(t voice.keys)"
+  if [[ $cpu_class == "weak" ]]; then
+    onb_say "$(t voice.cpu_weak "$cpu_model")"
+    return 0
+  fi
+  onb_say "$(t voice.cpu_ok "$cpu_model")"
+  [[ -f $cfg ]] || { onb_warn "$cfg missing"; return 0; }
+  onb_confirm "$(t voice.set_cs)" || { onb_say "$(t notify.skipped)"; return 0; }
+  sed -E 's/^model = .*/model = "base"/; s/^language = .*/language = "cs"/' "$cfg" | onb_write "$cfg"
+  onb_say "voxtype setup model   # stáhne model base, pokud ještě chybí"
+  systemctl --user restart voxtype 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------- herdr
+cmd_herdr() {
+  require_profile || return 1
+  command -v herdr >/dev/null 2>&1 || { onb_say "$(t herdr.missing)"; return 0; }
+  local label="start" tabs=(main)
+  if onb_has_goal coding; then
+    label="projekt"; tabs=(control agents runtime tests)
+  elif onb_has_goal ai; then
+    label="ai"; tabs=(agents notes)
+  fi
+  jq -n --arg label "$label" --argjson tabs "$(printf '%s\n' "${tabs[@]}" | jq -R . | jq -s .)" \
+    '{workspace: $label, tabs: $tabs, cwd: "~"}' | onb_write "$ONB_CONFIG/herdr-layout.json"
+  if ! herdr status server >/dev/null 2>&1; then
+    onb_say "$(t herdr.not_running)"
+    return 0
+  fi
+  onb_confirm "$(t confirm.apply)" || return 0
+  local created ws first_tab tab
+  created="$(herdr workspace create --cwd "$HOME" --label "$label" --no-focus)" || return 1
+  ws="$(jq -r '.result.workspace.workspace_id' <<<"$created")"
+  first_tab="$(jq -r '.result.tab.tab_id' <<<"$created")"
+  herdr tab rename "$first_tab" "${tabs[0]}" >/dev/null 2>&1 || true
+  for tab in "${tabs[@]:1}"; do
+    herdr tab create --workspace "$ws" --label "$tab" --no-focus >/dev/null || true
+  done
+  onb_say "$(t herdr.created "$label" "${tabs[*]}")"
+}
+
+# ---------------------------------------------------------------- plugins
+cmd_plugins() {
+  local goals='["web","learning"]'
+  [[ -f $ONB_PROFILE ]] && goals="$(jq -c .goals "$ONB_PROFILE")"
+  onb_say "$(t plugins.intro)"
+  jq -r --argjson goals "$goals" --arg tp "$(t plugins.third_party)" '
+    .[] | select(any(.goals[]; . as $g | $goals | index($g)))
+    | "• \(.name) [\(.source)]\(if (.source | test("third")) then " – " + $tp else "" end)\n    \(.enable // .install)\(if .note != "" then "\n    " + .note else "" end)"' \
+    "$ONB_ROOT/onboarding/plugins.json"
+  onb_say ""
+  onb_say "$(t notify.needs_sudo) (sudo/yay/hyprpm)"
+}
+
+# ---------------------------------------------------------------- prompts / tutor
+cmd_prompt() {
+  local name="${1:-tutor}" file
+  file="$ONB_ROOT/prompts/$name.md"
+  [[ $name =~ ^[a-z0-9_-]+$ && -f $file ]] || { onb_warn "unknown prompt: $name"; return 2; }
+  cat "$file"
+  if [[ -f $ONB_PROFILE ]]; then
+    printf '\n## Profil uživatele (profile.json)\n\n```json\n'
+    cat "$ONB_PROFILE"
+    printf '```\n'
+  fi
+}
+
+cmd_tutor() {
+  local prompt agent
+  prompt="$(cmd_prompt tutor)"
+  for agent in omp codex claude agy gemini; do
+    command -v "$agent" >/dev/null 2>&1 || continue
+    onb_say "→ $agent"
+    "$agent" "$prompt"
+    return
+  done
+  onb_warn "$(t notify.missing_cmd "omp/codex/claude/agy")"
+  printf '%s\n' "$prompt"
+}
+
+# ---------------------------------------------------------------- i18n
+cmd_i18n_check() {
+  local lang="${1:-}" key nmissing=0
+  [[ $lang =~ ^[A-Za-z0-9_-]+$ ]] || { onb_warn "usage: omarchy-onboard i18n-check <lang>"; return 2; }
+  omarchy_i18n_load cs
+  local -a keys=("${!MSG[@]}")
+  if [[ ! -d $ONB_ROOT/i18n/$lang ]]; then
+    onb_warn "no locale directory: i18n/$lang (copy i18n/_template)"
+    return 1
+  fi
+  MSG=()
+  local file
+  for file in "$ONB_ROOT/i18n/$lang"/*.sh; do
+    # shellcheck source=/dev/null
+    source "$file"
+  done
+  for key in "${keys[@]}"; do
+    [[ -n ${MSG[$key]:-} ]] || { printf '%s\n' "$key"; nmissing=$((nmissing + 1)); }
+  done
+  onb_say "missing: $nmissing / ${#keys[@]}" >&2
+}
+
+# ---------------------------------------------------------------- menu hook
+# Adds an "onboard" submenu to the user's Omarchy menu extension file. Only
+# the block between the markers is ever touched; the rest of the file stays.
+MENU_EXT="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+MENU_BEGIN="// >>> omarchy-onboard >>>"
+MENU_END="// <<< omarchy-onboard <<<"
+
+onb_self() {
+  if command -v omarchy-onboard >/dev/null 2>&1; then echo omarchy-onboard; else realpath "$ONB_ROOT/bin/omarchy-onboard"; fi
+}
+
+jsonc_valid() {
+  # Strip // comments and trailing commas, then ask jq.
+  sed -E 's#(^|[[:space:]])//.*$##' "$1" | tr '\n' ' ' | sed -E 's/,[[:space:]]*([]}])/\1/g' | jq empty >/dev/null 2>&1
+}
+
+menu_strip_block() {
+  awk -v b="$MENU_BEGIN" -v e="$MENU_END" 'index($0,b){skip=1;next} index($0,e){skip=0;next} !skip' "$1"
+}
+
+menu_entries() {
+  local self launch
+  self="$(onb_self)"
+  launch="omarchy-launch-floating-terminal-with-presentation"
+  jq -n --arg l "$(t menu.onboard)" --arg d "$(t menu.onboard_desc)" '{"onboard":{icon:"󰑴",label:$l,description:$d}}' -c | sed -E 's/^\{/  /; s/\}$/,/'
+  local id label sub icon item
+  for item in "wizard|menu.onboard|wizard|󰑴" "practice|menu.practice|practice|󰌌" "tutor|menu.tutor|tutor|󰚩" "plugins|menu.plugins|plugins|󰏗"; do
+    IFS='|' read -r id label sub icon <<<"$item"
+    jq -n --arg k "onboard.$id" --arg i "$icon" --arg l "$(t "$label")" --arg a "$launch \"$self $sub\"" '{($k):{icon:$i,label:$l,action:$a}}' -c | sed -E 's/^\{/  /; s/\}$/,/'
+  done
+}
+
+cmd_menu() {
+  local action="${1:-install}" body tmp
+  case $action in
+    install|remove) ;;
+    *) onb_warn "usage: omarchy-onboard menu install|remove"; return 2 ;;
+  esac
+  tmp="$(mktemp)"
+  if [[ -f $MENU_EXT ]]; then menu_strip_block "$MENU_EXT" >"$tmp"; else printf '{\n}\n' >"$tmp"; fi
+  if [[ $action == install ]]; then
+    body="$(menu_entries)"
+    # Insert before the last closing brace; add a comma to the previous entry if it lacks one.
+    ONB_MENU_BODY="$body" awk -v b="$MENU_BEGIN" -v e="$MENU_END" '
+      { line[NR]=$0 }
+      END {
+        last=0; for (i=NR;i>0;i--) if (line[i] ~ /^[[:space:]]*}[[:space:]]*$/) { last=i; break }
+        prev=0; for (i=last-1;i>0;i--) { l=line[i]; sub(/^[[:space:]]+/,"",l); if (l!="" && l !~ /^\/\//) { prev=i; break } }
+        if (prev && line[prev] !~ /[,{][[:space:]]*$/) line[prev]=line[prev] ","
+        for (i=1;i<=NR;i++) {
+          if (i==last) { print "  " b; print ENVIRON["ONB_MENU_BODY"]; print "  " e }
+          print line[i]
+        }
+      }' "$tmp" >"$tmp.new" && mv "$tmp.new" "$tmp"
+  fi
+  if ! jsonc_valid "$tmp"; then
+    rm -f "$tmp"
+    onb_warn "$(t menu.invalid)"
+    return 1
+  fi
+  onb_write "$MENU_EXT" <"$tmp"
+  rm -f "$tmp"
+  if [[ $action == install ]]; then onb_say "$(t menu.installed "$(t menu.onboard)" "$MENU_EXT")"; else onb_say "$(t menu.removed)"; fi
+}
+
+# ---------------------------------------------------------------- first run
+# Optional and OFF by default: an XDG autostart entry that opens the wizard
+# once, only while no profile.json exists. Enable with `firstrun-hook enable`.
+FIRSTRUN_DESKTOP="$HOME/.config/autostart/omarchy-onboard.desktop"
+
+cmd_firstrun() {
+  [[ -f $ONB_PROFILE ]] && return 0
+  [[ -f $ONB_STATE/firstrun-shown ]] && return 0
+  mkdir -p "$ONB_STATE" && : >"$ONB_STATE/firstrun-shown"
+  local msg
+  msg="$(t firstboot.welcome)"$'\n'"$(t firstboot.key_menu)"$'\n'"$(t firstboot.key_help)"$'\n'"$(t firstboot.next)"
+  command -v notify-send >/dev/null 2>&1 && notify-send -a Omarchy "$(t menu.onboard)" "$msg"
+  if command -v omarchy-launch-floating-terminal-with-presentation >/dev/null 2>&1; then
+    omarchy-launch-floating-terminal-with-presentation "$(onb_self) wizard"
+  fi
+}
+
+cmd_firstrun_hook() {
+  case ${1:-status} in
+    enable)
+      onb_write "$FIRSTRUN_DESKTOP" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Omarchy onboarding (first run)
+Comment=Opens omarchy-onboard once while no profile exists
+Exec=$(onb_self) firstrun
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+      onb_say "$(t firstboot.hook_on)" ;;
+    disable)
+      if [[ -f $FIRSTRUN_DESKTOP ]]; then
+        onb_backup "$FIRSTRUN_DESKTOP"
+        rm -f "$FIRSTRUN_DESKTOP"
+      fi
+      onb_say "$(t firstboot.hook_off)" ;;
+    status)
+      if [[ -f $FIRSTRUN_DESKTOP ]]; then onb_say "$(t firstboot.hook_status_on "$FIRSTRUN_DESKTOP")"; else onb_say "$(t firstboot.hook_status_off)"; fi ;;
+    *) onb_warn "usage: omarchy-onboard firstrun-hook enable|disable|status"; return 2 ;;
+  esac
+}
+
+# ---------------------------------------------------------------- main
+main() {
+  omarchy_i18n_load "${OMARCHY_LANG:-}"
+  local cmd="${1:-wizard}"
+  if [[ $cmd == -* ]]; then
+    cmd="wizard"
+  else
+    shift
+  fi
+  case $cmd in
+    wizard) cmd_wizard "$@" ;;
+    login) cmd_login ;;
+    bindings) cmd_bindings ;;
+    practice) cmd_practice ;;
+    voxtype) cmd_voxtype ;;
+    herdr) cmd_herdr ;;
+    plugins) cmd_plugins ;;
+    tutor) cmd_tutor ;;
+    prompt) cmd_prompt "$@" ;;
+    i18n-check) cmd_i18n_check "$@" ;;
+    menu) cmd_menu "$@" ;;
+    firstrun) cmd_firstrun ;;
+    firstrun-hook) cmd_firstrun_hook "$@" ;;
+    help|--help|-h) usage ;;
+    *) onb_warn "unknown command: $cmd"; usage; return 2 ;;
+  esac
+}
+
+main "$@"
