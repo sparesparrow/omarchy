@@ -1,0 +1,20 @@
+# shellcheck shell=bash disable=SC2034
+# Czech menu strings (labels for menu rows and onboarding entries). Keep labels short.
+MSG["menu.onboard"]="Průvodce pro začátečníky"
+MSG["menu.practice"]="Procvičit zkratky"
+MSG["menu.login"]="Přihlásit AI účty"
+MSG["menu.bindings"]="Moje zkratky"
+MSG["menu.dictation"]="Diktování"
+MSG["menu.herdr"]="Herdr pro agenty"
+MSG["menu.plugins"]="Doporučené doplňky"
+MSG["menu.apps"]="Aplikace"
+MSG["menu.settings"]="Nastavení"
+MSG["menu.update"]="Aktualizovat systém"
+MSG["menu.learn"]="Výuka"
+MSG["menu.keybindings"]="Klávesové zkratky"
+MSG["menu.quit"]="Konec"
+MSG["menu.onboard_desc"]="Průvodce, procvičování zkratek a AI lektor v češtině"
+MSG["menu.tutor"]="AI lektor"
+MSG["menu.installed"]='Položka „%s“ je v nabídce Omarchy (%s).'
+MSG["menu.removed"]="Položky průvodce jsou odebrané z nabídky Omarchy."
+MSG["menu.invalid"]="Po úpravě by soubor nabídky nebyl platný, proto nic neměním."
